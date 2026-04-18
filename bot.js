@@ -1,4 +1,12 @@
 require('dotenv').config();
+
+// Strip BOM/CRLF from .env values — undici rejects Authorization headers with \r or \n
+const discordToken = process.env.DISCORD_TOKEN?.replace(/^\uFEFF/, '').trim();
+if (!discordToken) {
+  console.error('Set DISCORD_TOKEN in .env (no quotes, no spaces around =).');
+  process.exit(1);
+}
+
 const axios = require('axios');
 const Discord = require('discord.js');
 
@@ -12,26 +20,23 @@ const client = new Discord.Client({
 });
 
 const KANYE_NAMES = ['yeezy', 'yeezus', 'ye', 'kanye'];
+const KANYE_REGEX = new RegExp(`\\b(${KANYE_NAMES.join('|')})\\b`, 'i');
 
-client.on('ready', () => {
+client.on('clientReady', () => {
   console.log(`Logged in as ${ client.user.tag }`);
 })
 
 client.on('messageCreate', msg => {
-  const message = msg.content.toLowerCase();
-  const words = message.split(' ');
+  if (!KANYE_REGEX.test(msg.content)) return;
 
-  for(const name of KANYE_NAMES) {
-    if(words.includes(name)) {
-      axios.get('https://api.kanye.rest')
-        .then(response => {
-          msg.reply(response.data.quote)
-        }).catch(e =>{
-          console.log(e)
-        })
-        break;
-    }
-  }
+  axios.get('https://api.kanye.rest')
+    .then(response => {
+      msg.reply(response.data.quote);
+    })
+    .catch(e => {
+      const status = e.response?.status;
+      console.error(`Failed to fetch Kanye quote${status ? ` (HTTP ${status})` : ''}:`, e.message);
+    });
 })
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(discordToken);
